@@ -35,7 +35,7 @@ Y <- spe
 # consensusRDA() à utiliser après avoir utilisé coeffCompare()
 
 ### Construct results object
-ndis <- 10
+ndis <- 16
 ordiRes <- vector("list", length = ndis)
 
 #---------------------------------------------
@@ -78,8 +78,60 @@ ordiRes[[9]] <- capscale(vegdist(decostand(Y, "log", logbase = 5), "altGower")~ 
 ordiRes[[10]] <- capscale(vegdist(decostand(Y, "log", logbase = 10), "altGower")~ ., data = env,
                           comm = Y) ### Warning message stem from log transformation of 0
 
+# Transformation of abundances in presence-absence data:
+Ybin <- Y
+for (i in 1:nrow(Y)) {
+  for (j in 1:ncol(Y)) if (Y[i, j] != 0) Ybin[i, j] = 1
+}
+
+Y[1:3, 1:10]
+Ybin[1:3, 1:10]
+
+### RDA species profile - binary
+spbin <- Ybin / apply(Ybin, 1, sum)
+ordiRes[[11]] <- rda(spbin ~ ., data = env)
+
+### db-RDA Ochiai
+library(ade4)
+och <- dist.binary(Ybin, method = 7)
+ordiRes[[12]] <- capscale(och ~ ., data = env, comm = Ybin)
+
+### db-RDA Raup-Crick
+ordiRes[[13]] <- capscale(sqrt(vegdist(Y, method = "raup", binary = T))~ ., data = env, 
+                          comm = Ybin)
+
+### RDA chi2
+chisq <- decostand(Ybin, method = "chi.square")
+ordiRes[[14]] <- rda(chisq~ ., data = env)
+
+### db-RDA Jaccard
+ordiRes[[15]] <- capscale(sqrt(vegdist(Y, method = "jaccard", binary = T))~ ., data = env, 
+                          comm = Ybin)
+
+### db-RDA Soerensen (Bray-Curtis)
+ordiRes[[16]] <- capscale(sqrt(vegdist(Y, method = "bray", binary = T))~ ., data = env, 
+                          comm = Ybin)
+
+# Significant axes of each RDA:
 rda_test <- vector("list", ndis)
 for (i in 1:ndis) rda_test[[i]] <- anova.cca(ordiRes[[i]], by = "axis")
+nb_sign_ax <- sapply(rda_test, function (x) length(which(x$Pr <= 0.05)))
 
 ### Compare association coefficients
-AssoComp <- coeffCompare(ordiRes, rep(7, ndis))
+AssoComp <- coeffCompare(ordiRes, nb_sign_ax)
+
+#---------------------------------------------
+### Draw a graphic to visualize the comparison
+#---------------------------------------------
+### Name of association coefficient compared
+name<-c("Species profiles", "Chord", "Hellinger", "Chi2", "Bray-Curtis", "(Bray-Curtis)^0.5",
+        "(Bray-Curtis)^0.25", "mGowerlog2", "mGowerlog5", "mGowerlog10", 
+        "Species profiles BIN", "Ochiai", "Raup", "chi2 BIN", "Jaccard", "Soerensen BIN")
+
+plot(AssoComp$mst, type = "t", labels = name, xlab = "", ylab = "", main = "MST Sites scores")
+
+# We remove Chi2 (abund et bin), Chord and Species profile (abund):
+ordiRes_final <- ordiRes[-c(1, 2, 4, 14)]
+(ndis <- length(ordiRes_final))
+
+
